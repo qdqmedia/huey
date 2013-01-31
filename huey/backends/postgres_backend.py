@@ -5,8 +5,12 @@ from redis.exceptions import ConnectionError
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
 
+# settings
+#QUEUE = huey.backends.redis_backend.RedisQueue 
+#QUEUE = huey.backends.postgres_backend.PostgresQueue 
 
-class RedisQueue(BaseQueue):
+#class RedisQueue(BaseQueue):
+class PostgresQueue(BaseQueue):
     """
     A simple Queue that uses the redis to store messages
     """
@@ -18,7 +22,8 @@ class RedisQueue(BaseQueue):
             'db': 0,
         }
         """
-        super(RedisQueue, self).__init__(name, **connection)
+        #super(RedisQueue, self).__init__(name, **connection)
+        super(PostgresQueue, self).__init__(name, **connection)
 
         self.queue_name = 'huey.redis.%s' % re.sub('[^a-z0-9]', '', name)
 
@@ -40,7 +45,7 @@ class RedisQueue(BaseQueue):
         return self.conn.llen(self.queue_name)
 
 
-class RedisBlockingQueue(RedisQueue):
+class RedisBlockingQueue(PostgresQueue):
     """
     Use the blocking right pop, should result in messages getting
     executed close to immediately by the consumer as opposed to
