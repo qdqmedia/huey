@@ -1,4 +1,4 @@
-import re
+import pickle
 
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
@@ -15,7 +15,8 @@ class PostgresQueue(BaseQueue):
         self.queue_name = name
 
     def write(self, data):
-        BackgroundTask.objects.create(data=data, name=self.queue_name)
+        key = pickle.loads(data)[0]
+        BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
 
     def read(self):
         try:
@@ -25,7 +26,7 @@ class PostgresQueue(BaseQueue):
         except IndexError:
             return None
         data = task.data
-        task.delete()
+        #task.delete()
         return data
 
     def remove(self, data):
@@ -51,8 +52,7 @@ class PostgresDataStore(BaseDataStore):
         self.storage_name = name
 
     def put(self, key, value):
-        val = re.sub(r"S'(.*)'\n(.*)\n.", '\\1', value)
-        BackgroundResultTask.objects.create(name=self.storage_name, key=key, result=val)
+        BackgroundResultTask.objects.create(name=self.storage_name, key=key, result=value)
 
     def peek(self, key):
         try:
