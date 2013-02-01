@@ -1,3 +1,5 @@
+import re
+
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
 from huey.djhuey.models import BackgroundTask, BackgroundResultTask
@@ -42,33 +44,27 @@ class PostgresQueue(BaseQueue):
         return BackgroundTask.objects.all().count()
 
 
-class RedisDataStore(BaseDataStore):
+class PostgresDataStore(BaseDataStore):
     def __init__(self, name, **connection):
-        """
-        RESULT_STORE_CONNECTION = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-        }
-        """
-        super(RedisDataStore, self).__init__(name, **connection)
+        super(PostgresDataStore, self).__init__(name, **connection)
 
-        self.storage_name = 'huey.redis.results.%s' % re.sub('[^a-z0-9]', '', name)
-        self.conn = redis.Redis(**connection)
+        self.storage_name = name
 
     def put(self, key, value):
-        self.conn.hset(self.storage_name, key, value)
+        val = re.sub(r"S'(.*)'\n(.*)\n.", '\\1', value)
+        BackgroundResultTask.objects.create(name=self.storage_name, key=key, result=val)
 
     def peek(self, key):
-        if self.conn.hexists(self.storage_name, key):
-            return self.conn.hget(self.storage_name, key)
-        return EmptyData
+        try:
+            return BackgroundResultTask.objects.get(name=self.storage_name, key=key).result
+        except BackgroundResultTask.DoesNotExist:
+            return EmptyData
 
     def get(self, key):
         val = self.peek(key)
         if val is not EmptyData:
-            self.conn.hdel(self.storage_name, key)
+            BackgroundResultTask.objects.get(name=self.storage_name, key=key).delete()
         return val
 
     def flush(self):
-        self.conn.delete(self.storage_name)
+        BackgroundResultTask.objects.filter(self.queue_name).delete()
