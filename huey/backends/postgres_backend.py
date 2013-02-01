@@ -1,5 +1,7 @@
 import pickle
 
+from django.conf import settings
+
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
 from huey.djhuey.models import BackgroundTask, BackgroundResultTask
@@ -8,6 +10,11 @@ from huey.djhuey.models import BackgroundTask, BackgroundResultTask
 class PostgresQueue(BaseQueue):
     """
     A simple Queue that uses PostgreSQL to store messages
+
+    Task stored in table won't be deleted. If you want to do that, you should
+    add next line to your 'settings.py' file:
+
+    HUEY_POSTGRES_BACKEND_DELETE_TASK = True
     """
     def __init__(self, name, **connection):
         super(PostgresQueue, self).__init__(name, **connection)
@@ -26,7 +33,9 @@ class PostgresQueue(BaseQueue):
         except IndexError:
             return None
         data = task.data
-        #task.delete()
+        del_task = getattr(settings, 'HUEY_POSTGRES_BACKEND_DELETE_TASK', False)
+        if del_task:
+            task.delete()
         return data
 
     def remove(self, data):
