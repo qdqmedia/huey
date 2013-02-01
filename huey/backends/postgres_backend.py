@@ -1,65 +1,45 @@
-import re
-import redis
-from redis.exceptions import ConnectionError
-
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
+from huey.djhuey.models import BackgroundTask, BackgroundResultTask
 
-# settings
-#QUEUE = huey.backends.redis_backend.RedisQueue 
-#QUEUE = huey.backends.postgres_backend.PostgresQueue 
 
-#class RedisQueue(BaseQueue):
 class PostgresQueue(BaseQueue):
     """
-    A simple Queue that uses the redis to store messages
+    A simple Queue that uses PostgreSQL to store messages
     """
     def __init__(self, name, **connection):
-        """
-        QUEUE_CONNECTION = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-        }
-        """
-        #super(RedisQueue, self).__init__(name, **connection)
         super(PostgresQueue, self).__init__(name, **connection)
 
-        self.queue_name = 'huey.redis.%s' % re.sub('[^a-z0-9]', '', name)
-
-        self.conn = redis.Redis(**connection)
+        self.queue_name = name
 
     def write(self, data):
-        self.conn.lpush(self.queue_name, data)
-
-    def read(self):
-        return self.conn.rpop(self.queue_name)
-
-    def remove(self, data):
-        return self.conn.lrem(self.queue_name, data)
-
-    def flush(self):
-        self.conn.delete(self.queue_name)
-
-    def __len__(self):
-        return self.conn.llen(self.queue_name)
-
-
-class RedisBlockingQueue(PostgresQueue):
-    """
-    Use the blocking right pop, should result in messages getting
-    executed close to immediately by the consumer as opposed to
-    being polled for
-    """
-    blocking = True
+        BackgroundTask.objects.create(data=data, name=self.queue_name)
 
     def read(self):
         try:
-            return self.conn.brpop(self.queue_name)[1]
-        except ConnectionError:
-            # unfortunately, there is no way to differentiate a socket timing
-            # out and a host being unreachable
+            task = BackgroundTask.objects.select_for_update().filter(processing=False).order_by('pk')[0]
+            task.processing = True
+            task.save()
+        except IndexError:
             return None
+        data = task.data
+        task.delete()
+        return data
+
+    def remove(self, data):
+        try:
+            task = BackgroundTask.objects.get(data=data)
+            data = task.data
+            task.delete()
+            return data
+        except BackgroundTask.DoesNotExist:
+            return ''
+
+    def flush(self):
+        BackgroundTask.objects.filter(self.queue_name).delete()
+
+    def __len__(self):
+        return BackgroundTask.objects.all().count()
 
 
 class RedisDataStore(BaseDataStore):
