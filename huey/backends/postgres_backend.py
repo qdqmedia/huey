@@ -61,18 +61,18 @@ class PostgresDataStore(BaseDataStore):
         self.storage_name = name
 
     def put(self, key, value):
-        BackgroundResultTask.objects.create(name=self.storage_name, key=key, result=value)
+        BackgroundResultTask.objects.create(name=self.storage_name, key_id=key, result=value)
 
     def peek(self, key):
         try:
-            return BackgroundResultTask.objects.get(name=self.storage_name, key=key).result
+            return BackgroundResultTask.objects.get(name=self.storage_name, key_id=key).result
         except BackgroundResultTask.DoesNotExist:
             return EmptyData
 
     def get(self, key):
         val = self.peek(key)
         if val is not EmptyData:
-            BackgroundResultTask.objects.get(name=self.storage_name, key=key).delete()
+            BackgroundResultTask.objects.get(name=self.storage_name, key_id=key).delete()
         return val
 
     def flush(self):
