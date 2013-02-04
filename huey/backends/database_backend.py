@@ -7,17 +7,21 @@ from huey.utils import EmptyData
 from huey.djhuey.models import BackgroundTask, BackgroundResultTask
 
 
-class PostgresQueue(BaseQueue):
+class DatabaseQueue(BaseQueue):
     """
-    A simple Queue that uses PostgreSQL to store messages
+    A simple Queue that uses a database to store messages
+
+    Don't forget to add following property to your Django settings file:
+
+    HUEY_CONFIG = {'QUEUE': 'huey.backends.database_backend.DatabaseQueue',}
 
     Task stored in table won't be deleted. If you want to do that, you should
     add next line to your 'settings.py' file:
 
-    HUEY_POSTGRES_BACKEND_DELETE_TASK = True
+    HUEY_DATABASE_BACKEND_DELETE_TASK = True
     """
     def __init__(self, name, **connection):
-        super(PostgresQueue, self).__init__(name, **connection)
+        super(DatabaseQueue, self).__init__(name, **connection)
 
         self.queue_name = name
 
@@ -33,7 +37,7 @@ class PostgresQueue(BaseQueue):
         except IndexError:
             return None
         data = task.data
-        del_task = getattr(settings, 'HUEY_POSTGRES_BACKEND_DELETE_TASK', False)
+        del_task = getattr(settings, 'HUEY_DATABASE_BACKEND_DELETE_TASK', False)
         if del_task:
             task.delete()
         return data
@@ -54,9 +58,9 @@ class PostgresQueue(BaseQueue):
         return BackgroundTask.objects.all().count()
 
 
-class PostgresDataStore(BaseDataStore):
+class DatabaseDataStore(BaseDataStore):
     def __init__(self, name, **connection):
-        super(PostgresDataStore, self).__init__(name, **connection)
+        super(DatabaseDataStore, self).__init__(name, **connection)
 
         self.storage_name = name
 
