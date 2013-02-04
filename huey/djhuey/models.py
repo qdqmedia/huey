@@ -13,6 +13,5 @@ class BackgroundTask(models.Model):
 class BackgroundResultTask(models.Model):
     name = models.CharField(max_length=255, verbose_name=_(u'Queue name'))
     result = models.TextField()
-    #key = models.CharField(max_length=255, verbose_name=_(u'Key'))
     key = models.ForeignKey(BackgroundTask, to_field='key')
     created_at = models.DateTimeField(auto_now_add=True)
