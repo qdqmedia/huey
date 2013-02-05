@@ -1,7 +1,8 @@
 import pickle
+import logging
 
-from django.conf import settings
-from django.db import IntegrityError
+from django.db import transaction
+from django.utils.decorators import method_decorator
 
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
@@ -16,7 +17,6 @@ class DjangoDBQueue(BaseQueue):
 
     HUEY_CONFIG = {
         'QUEUE': 'huey.backends.database_backend.DjangoDBQueue',
-        'DB_BACKEND_DELETE_TASK': True,
         'RESULT_STORE': 'huey.backends.django_db_backend.DjangoDBDataStore',
     }
 
@@ -25,33 +25,32 @@ class DjangoDBQueue(BaseQueue):
         super(DjangoDBQueue, self).__init__(name, **connection)
 
         self.queue_name = name
-        self.del_task = False
 
-        if getattr(settings, 'HUEY_CONFIG', None) is not None and 'DB_BACKEND_DELETE_TASK' in settings.HUEY_CONFIG.keys():
-            self.del_task = settings.HUEY_CONFIG['DB_BACKEND_DELETE_TASK']
-
+    @method_decorator(transaction.commit_manually)
     def write(self, data):
         key = pickle.loads(data)[0]
-        try:
-            BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
-        except IntegrityError:
-            # We create only one task for each periodic task
-            pass
 
+        if BackgroundTask.objects.filter(name=self.queue_name, key=key).count() == 0:
+            BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
+        else:
+            task = BackgroundTask.objects.select_for_update().get(key=key)
+            task.processing = False
+            task.save()
+
+        transaction.commit()
+
+    @method_decorator(transaction.commit_manually)
     def read(self):
         try:
             task = BackgroundTask.objects.select_for_update().filter(processing=False, name=self.queue_name).order_by('pk')[0]
             task.processing = True
             task.save()
+            transaction.commit()
         except IndexError:
+            transaction.rollback()
             return None
 
-        data = task.data
-
-        if self.del_task:
-            task.delete()
-
-        return data
+        return task.data
 
     def remove(self, data):
         try:
@@ -78,10 +77,14 @@ class DjangoDBDataStore(BaseDataStore):
     def put(self, key, value):
         BackgroundResultTask.objects.create(name=self.storage_name, key_id=key, result=value)
 
+    #@transaction.commit_manually
     def peek(self, key):
         try:
-            return BackgroundResultTask.objects.get(name=self.storage_name, key_id=key).result
+            result = BackgroundResultTask.objects.get(name=self.storage_name, key_id=key).result
+            transaction.commit()
+            return result
         except BackgroundResultTask.DoesNotExist:
+            #transaction.rollback()
             return EmptyData
 
     def get(self, key):
@@ -91,4 +94,4 @@ class DjangoDBDataStore(BaseDataStore):
         return val
 
     def flush(self):
-        BackgroundResultTask.objects.filter(name=self.queue_name).delete()
+        BackgroundResultTask.objects.filter(name=self.storage_name).delete()
