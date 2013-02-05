@@ -1,45 +1,56 @@
 import pickle
 
 from django.conf import settings
+from django.db import IntegrityError
 
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
 from huey.djhuey.models import BackgroundTask, BackgroundResultTask
 
 
-class DatabaseQueue(BaseQueue):
+class DjangoDBQueue(BaseQueue):
     """
     A simple Queue that uses a database to store messages
 
-    Don't forget to add following property to your Django settings file:
+    Configuration example:
 
-    HUEY_CONFIG = {'QUEUE': 'huey.backends.database_backend.DatabaseQueue',}
+    HUEY_CONFIG = {
+        'QUEUE': 'huey.backends.database_backend.DjangoDBQueue',
+        'DB_BACKEND_DELETE_TASK': True,
+        'RESULT_STORE': 'huey.backends.django_db_backend.DjangoDBDataStore',
+    }
 
-    Task stored in table won't be deleted. If you want to do that, you should
-    add next line to your 'settings.py' file:
-
-    HUEY_DATABASE_BACKEND_DELETE_TASK = True
     """
     def __init__(self, name, **connection):
-        super(DatabaseQueue, self).__init__(name, **connection)
+        super(DjangoDBQueue, self).__init__(name, **connection)
 
         self.queue_name = name
+        self.del_task = False
+
+        if getattr(settings, 'HUEY_CONFIG', None) is not None and 'DB_BACKEND_DELETE_TASK' in settings.HUEY_CONFIG.keys():
+            self.del_task = settings.HUEY_CONFIG['DB_BACKEND_DELETE_TASK']
 
     def write(self, data):
         key = pickle.loads(data)[0]
-        BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
+        try:
+            BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
+        except IntegrityError:
+            # We create only one task for each periodic task
+            pass
 
     def read(self):
         try:
-            task = BackgroundTask.objects.select_for_update().filter(processing=False).order_by('pk')[0]
+            task = BackgroundTask.objects.select_for_update().filter(processing=False, name=self.queue_name).order_by('pk')[0]
             task.processing = True
             task.save()
         except IndexError:
             return None
+
         data = task.data
-        del_task = getattr(settings, 'HUEY_DATABASE_BACKEND_DELETE_TASK', False)
-        if del_task:
+
+        if self.del_task:
             task.delete()
+
         return data
 
     def remove(self, data):
@@ -52,15 +63,15 @@ class DatabaseQueue(BaseQueue):
             return ''
 
     def flush(self):
-        BackgroundTask.objects.filter(self.queue_name).delete()
+        BackgroundTask.objects.filter(name=self.queue_name).delete()
 
     def __len__(self):
         return BackgroundTask.objects.all().count()
 
 
-class DatabaseDataStore(BaseDataStore):
+class DjangoDBDataStore(BaseDataStore):
     def __init__(self, name, **connection):
-        super(DatabaseDataStore, self).__init__(name, **connection)
+        super(DjangoDBDataStore, self).__init__(name, **connection)
 
         self.storage_name = name
 
@@ -80,4 +91,4 @@ class DatabaseDataStore(BaseDataStore):
         return val
 
     def flush(self):
-        BackgroundResultTask.objects.filter(self.queue_name).delete()
+        BackgroundResultTask.objects.filter(name=self.queue_name).delete()
