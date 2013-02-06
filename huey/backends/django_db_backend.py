@@ -1,5 +1,4 @@
 import pickle
-import logging
 
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -77,14 +76,11 @@ class DjangoDBDataStore(BaseDataStore):
     def put(self, key, value):
         BackgroundResultTask.objects.create(name=self.storage_name, key_id=key, result=value)
 
-    #@transaction.commit_manually
     def peek(self, key):
         try:
             result = BackgroundResultTask.objects.get(name=self.storage_name, key_id=key).result
-            transaction.commit()
             return result
         except BackgroundResultTask.DoesNotExist:
-            #transaction.rollback()
             return EmptyData
 
     def get(self, key):
