@@ -2,6 +2,7 @@ import pickle
 
 from django.db import transaction
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 
 from huey.backends.base import BaseQueue, BaseDataStore
 from huey.utils import EmptyData
@@ -29,7 +30,7 @@ class DjangoDBQueue(BaseQueue):
     def write(self, data):
         key = pickle.loads(data)[0]
 
-        if BackgroundTask.objects.filter(name=self.queue_name, key=key).count() == 0:
+        if not BackgroundTask.objects.filter(name=self.queue_name, key=key).exists():
             BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
         else:
             task = BackgroundTask.objects.select_for_update().get(key=key)
@@ -42,6 +43,7 @@ class DjangoDBQueue(BaseQueue):
     def read(self):
         try:
             task = BackgroundTask.objects.select_for_update().filter(processing=False, name=self.queue_name).order_by('pk')[0]
+            task.last_started_at = timezone.now()
             task.processing = True
             task.save()
             transaction.commit()

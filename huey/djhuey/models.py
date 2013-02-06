@@ -10,6 +10,10 @@ class BackgroundTask(models.Model):
     processing = models.BooleanField(default=False)
     key = models.CharField(max_length=255, verbose_name=_(u'Command'), unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    last_started_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ('-last_started_at',)
 
     @property
     def task_name(self):
@@ -25,7 +29,7 @@ class BackgroundTask(models.Model):
 class BackgroundResultTask(models.Model):
     name = models.CharField(max_length=255, verbose_name=_(u'Queue name'))
     result = models.TextField()
-    key = models.ForeignKey(BackgroundTask, to_field='key')
+    key = models.OneToOneField(BackgroundTask, to_field='key')
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
