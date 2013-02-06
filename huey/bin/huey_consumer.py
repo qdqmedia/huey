@@ -132,9 +132,9 @@ class Consumer(object):
         try:
             command = self.invoker.dequeue()
         except QueueReadException:
-            self.logger.error('error reading from queue', exc_info=1)
+            self.logger.exception('error reading from queue', exc_info=1)
         except QueueException:
-            self.logger.error('queue exception', exc_info=1)
+            self.logger.exception('queue exception', exc_info=1)
         else:
             if not command and not self.invoker.blocking:
                 # no new messages and our queue doesn't block, so sleep a bit before
@@ -187,7 +187,7 @@ class Consumer(object):
         except DataStorePutException:
             self.logger.warn('error storing result', exc_info=1)
         except:
-            self.logger.error('unhandled exception in worker thread', exc_info=1)
+            self.logger.exception('unhandled exception in worker thread', exc_info=1)
             if command.retries:
                 self.requeue_command(command)
         finally:
@@ -204,7 +204,7 @@ class Consumer(object):
             else:
                 self.invoker.enqueue(command)
         except QueueWriteException:
-            self.logger.error('unable to re-enqueue %s, error writing to backend' % command.task_id)
+            self.logger.exception('unable to re-enqueue %s, error writing to backend' % command.task_id)
 
     def start(self):
         self.load_schedule()
@@ -257,7 +257,7 @@ class Consumer(object):
             while not self._shutdown.is_set():
                 self._shutdown.wait(.1)
         except:
-            self.logger.error('error', exc_info=1)
+            self.logger.exception('error', exc_info=1)
             self.shutdown()
 
         self.save_schedule()
