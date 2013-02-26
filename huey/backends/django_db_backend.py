@@ -34,6 +34,7 @@ class DjangoDBQueue(BaseQueue):
             BackgroundTask.objects.create(data=data, name=self.queue_name, key=key)
         else:
             task = BackgroundTask.objects.select_for_update().get(key=key)
+            task.data = data
             task.processing = False
             task.save()
 
